@@ -5,10 +5,10 @@ import cv2
 import math
 import ptvsd
 import heapq
-
 #ptvsd.enable_attach(address=('localhost', 5678), redirect_output=True)
 #ptvsd.wait_for_attach()
 
+plot = True
 
 class Position:
     def __init__(self, posX, posY):
@@ -31,22 +31,28 @@ class Thing:
 def main():
     box_count = 200
     size = 200
-    radius = 5
-    stepSize = 5
+    radius = 4
+    stepSize = 3
 
     while True:
-        things = generateThings(radius, radius, 15, size)
+        things, obstacles= generateThings(radius, radius, 6, size)
 
         #image = drawGrid(box_count, size, things)  
 
-        came_from, cost_so_far = a_star_search(things[2:], things[0], things[1], stepSize, radius, size)
-        path= createRoute(came_from, things[0], things[1])
+        came_from, cost_so_far, last = a_star_search(obstacles, things[0], things[1], stepSize, radius, size)
+        path= createRoute(came_from, things[0], last)
         #print(path)
         
         if path:
-            image = drawGrid(box_count, size, things, path[1:-1])  
-            print("Path:")
-            print(path)
+            #image = drawGrid(box_count, size, things, path[1:-1])  
+            newPath = [(i,j) for (i,j,k) in path]
+            x = [i for (i,j,k) in path]
+            y = [j for (i,j,k) in path]
+            #print("Path:")
+            #print(newPath)
+            if plot:
+                from route_plotter import plotGraph
+                plotGraph(things, obstacles, path=(x,y))
         else:
             print("infeasible")
             continue
@@ -56,9 +62,6 @@ def main():
         if (k == 27):
             cv2.destroyAllWindows()
             break
-        #If key a pressed
-        elif (k==97):
-            print(type(image))
         else:
             cv2.destroyAllWindows()
         
@@ -66,14 +69,15 @@ def main():
 ## TODO: Needs to implement collision control in generating objects.
 def generateThings(obstacleRadius, thingRadius, obstacleCount, maxSize):
     
-    tmpList = []
+    tmpList1 = []
+    tmpList2 = []
 
     randPoints = np.random.rand(2,3)
-    randPoints[:, 0] = (thingRadius + randPoints[:, 0] * (maxSize-2*thingRadius)).astype(int)
-    randPoints[:, 1] = (thingRadius + randPoints[:, 1] * (maxSize-2*thingRadius)).astype(int)
-    randPoints[:, 2] = (randPoints[:, 2] * 360).astype(int)
-    tmpList.append(Thing(Position(randPoints[0,0], randPoints[0,1]), randPoints[0,2], thingRadius, "Start"))
-    tmpList.append(Thing(Position(randPoints[1,0], randPoints[1,1]), randPoints[1,2], thingRadius, "End"))
+    randPoints[:, 0] = (thingRadius + randPoints[:, 0] * (maxSize-2*thingRadius))
+    randPoints[:, 1] = (thingRadius + randPoints[:, 1] * (maxSize-2*thingRadius))
+    randPoints[:, 2] = (randPoints[:, 2] * 360)
+    tmpList1.append(Thing(Position(randPoints[0,0], randPoints[0,1]), randPoints[0,2], thingRadius, "Start"))
+    tmpList1.append(Thing(Position(randPoints[1,0], randPoints[1,1]), randPoints[1,2], thingRadius, "End"))
 
     counter=0
     while counter<obstacleCount:
@@ -82,52 +86,19 @@ def generateThings(obstacleRadius, thingRadius, obstacleCount, maxSize):
         randPoints[0,1] = (obstacleRadius + randPoints[0,1] * (maxSize-2*obstacleRadius)).astype(int)
         randPoints[0,2] = (randPoints[0,2] * 360).astype(int)
         tmpThing = Thing(Position(randPoints[0,0], randPoints[0,1]),randPoints[0,2], obstacleRadius, "Obstacle")
-        if not isCollided(tmpList, (tmpThing.x, tmpThing.y), obstacleRadius, 5):
-            tmpList.append(tmpThing)
+        if not isCollided(tmpList2, (tmpThing.x, tmpThing.y), obstacleRadius, 5):
+            tmpList2.append(tmpThing)
             counter+=1    
-    return tmpList
+    return tmpList1, tmpList2
 
 
-def drawGrid(box_count, size, things, path):
-    image = np.array(np.ones((size, size, 3))*255 ,dtype=np.uint8)
-    
-    y_start = 0
-    y_end = size
-    ss = size // box_count
 
-    #for x in range(0, size, ss):
-        #cv2.line(image, (x, y_start), (x, y_end), (0, 0, 0))
-    #cv2.line(image,(size-1, y_start), (size-1, y_end),(0, 0, 0))
-    x_start = 0
-    x_end = size
-
-    #for y in range(0, size, ss):
-    #    cv2.line(image, (x_start, y), (x_end, y), (0, 0, 0))
-    #cv2.line(image, (x_start, size-1), (x_end, size-1), (0, 0, 0))
-
-    for i,j in path:
-        pts=np.array([[i*ss, j*ss], [(i)*ss, (j+1)*ss], [(i+1)*ss, (j+1)*ss], [(i+1)*ss, (j)*ss]], dtype=np.int32)
-        #print(pts)
-        cv2.fillPoly(image, [pts], color=(0, 0, 255))
-    for i in range(len(things)):
-        pts=np.array([[things[i].x-things[i].radius, things[i].y-things[i].radius],
-        [things[i].x-things[i].radius, things[i].y+things[i].radius],
-        [things[i].x+things[i].radius, things[i].y+things[i].radius],
-        [things[i].x+things[i].radius, things[i].y-things[i].radius]]).astype(np.int64)
-        if things[i].type == "Obstacle":
-            cv2.fillPoly(image, [pts], color=(0, 128, 255))
-        elif things[i].type == "Start":
-            cv2.fillPoly(image, [pts], color=(0, 255, 0))
-        elif things[i].type == "End":
-            cv2.fillPoly(image, [pts], color=(255, 0, 0))
-    cv2.imshow('Route Finding',image)
-    return image
-
+        
 
 def createRoute(came_from, start, end):
     path = []
-    path.append((end.x, end.y))
-    tmp=(end.x,end.y)
+    path.append((end[0], end[1], end[2]))
+    tmp=(end[0],end[1], end[2])
     if tmp in came_from:
         while came_from[tmp]:
             path.append(came_from[tmp])
@@ -140,7 +111,9 @@ def createRoute(came_from, start, end):
         return None
 
 
-def heuristic(x1, y1, x2, y2):
+def heuristic(x1, y1, theta1, x2, y2, theta2):
+    
+    return 1*(2*math.pi-math.radians(abs(theta2-theta1))) + 1*(abs(x1-x2)+abs(y1-y2))
     return abs(x1 - x2) + abs(y1 - y2)
     #return 0
     #return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
@@ -148,7 +121,8 @@ def heuristic(x1, y1, x2, y2):
 
 def isCollided(objects, current, thingRadius, safeRadius):
     for i in range(len(objects)):
-        if (abs(current[0]- objects[i].x) <= thingRadius + objects[i].radius + safeRadius) and (abs(current[1]- objects[i].y) <= thingRadius + objects[i].radius + safeRadius):
+        if (abs(current[0]- objects[i].x) <= thingRadius + objects[i].radius + safeRadius) \
+            and (abs(current[1]- objects[i].y) <= thingRadius + objects[i].radius + safeRadius):
             return True
     return False
 
@@ -160,11 +134,10 @@ def isStepAvaible(objects, next, thingRadius, safeRadius, maxSize):
             return True
     else:
         return False
-    return True
 
 
 #burada priority queue kisminda bir hata var istenileni secmiyor
-def a_star_search(objects, start, goal, stepSize, radius, maxSize):
+def a_star_search(objects, start, goal, stepSize, radius, maxSize, maxItCount = 200000):
     
     h = []
     heapq.heappush(h, (0, (start.x, start.y, start.angle)))
@@ -175,12 +148,13 @@ def a_star_search(objects, start, goal, stepSize, radius, maxSize):
     came_from[(start.x, start.y, start.angle)] = None
     cost_so_far[(start.x, start.y, start.angle)] = 0
     iteration =0
-    while len(h)>0:
+    while len(h)>0 and iteration < maxItCount:
         current = heapq.heappop(h)
-        if current[1][0] == goal.x and current[1][1] == goal.y:
+        if abs(current[1][0]-goal.x) < start.radius and abs(current[1][1] - goal.y) < start.radius and abs(current[1][2] - goal.angle) < 20:
+            
             break
-        for new_position in [(0, -stepSize), (0, stepSize), (-stepSize, 0), (stepSize, 0)]:
-            next = (current[1][0] + new_position[0], current[1][1] + new_position[1])
+        for angle in [ -20, 0, 20]:
+            next =(current[1][0] + stepSize*math.sin(math.radians(current[1][2] + angle)), current[1][1] + stepSize*math.cos(math.radians(current[1][2] + angle)), current[1][2] + angle)
             new_cost = cost_so_far[current[1]] + stepSize
             if next not in cost_so_far or new_cost < cost_so_far[next]:
                 if next[0] > (maxSize - 1) or next[0] < 0 or next[1] > (maxSize - 1) or next[1] < 0:
@@ -188,14 +162,15 @@ def a_star_search(objects, start, goal, stepSize, radius, maxSize):
                 if not isStepAvaible(objects, next, start.radius, radius, maxSize):
                     continue
                 cost_so_far[next] = new_cost
-                priority = new_cost + heuristic(goal.x, goal.y, next[0], next[1])
+                priority = new_cost + heuristic(goal.x, goal.y, goal.angle, next[0], next[1], next[2])
                 #breakpoint()
                 heapq.heappush(h, (priority, next))
                 came_from[next] = current[1]
                 #print(current[1], next, priority, came_from[next], iteration)
         iteration+=1
+        #print(iteration, len(h))
                 
-    return came_from, cost_so_far
+    return came_from, cost_so_far, next
 
 
 if __name__ == '__main__':
