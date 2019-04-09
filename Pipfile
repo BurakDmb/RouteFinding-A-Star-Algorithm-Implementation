@@ -10,6 +10,7 @@ opencv-contrib-python = "*"
 numpy = "*"
 imutils = "*"
 pillow = "*"
+ptvsd = "*"
 
 [requires]
 python_version = "2.7"
