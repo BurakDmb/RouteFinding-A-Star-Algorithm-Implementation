@@ -3,7 +3,6 @@ import time
 import numpy as np
 import cv2
 import math
-import ptvsd
 import heapq
 #ptvsd.enable_attach(address=('localhost', 5678), redirect_output=True)
 #ptvsd.wait_for_attach()
