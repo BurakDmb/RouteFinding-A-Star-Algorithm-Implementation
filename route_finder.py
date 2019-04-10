@@ -105,7 +105,9 @@ def createRoute(came_from, start, end):
                 tmp = came_from[tmp]
             else:
                 break
-        return path[::-1]
+        tmppath = path[::-1]
+        n= int(len(tmppath)*0.1)+1
+        return tmppath[::n]
     else:
         return None
 
